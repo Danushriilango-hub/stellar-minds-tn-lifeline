@@ -1,0 +1,17 @@
+{
+  "name": "Stellar Minds — TN Lifeline Router",
+  "short_name": "TN Lifeline",
+  "description": "Tamil Nadu emergency ambulance and hospital routing prototype",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f3f6fa",
+  "theme_color": "#102a43",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

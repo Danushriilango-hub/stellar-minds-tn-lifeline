@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stellar Minds — TN Lifeline Router</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+body{margin:0;font-family:Arial,sans-serif;background:#f3f6fa;color:#172033}header{background:#102a43;color:#fff;padding:18px 22px}header h1{margin:0 0 5px}main{max-width:1250px;margin:auto;padding:16px}.grid{display:grid;grid-template-columns:390px 1fr;gap:16px}.card{background:#fff;padding:16px;border-radius:12px;margin-bottom:16px;box-shadow:0 2px 10px #0001}h2{font-size:18px;margin-top:0}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}label{display:block;font-size:12px;font-weight:bold;margin-top:7px}input,textarea{width:100%;box-sizing:border-box;padding:9px;border:1px solid #ccd5df;border-radius:7px}textarea{min-height:60px}button{padding:10px 13px;border:0;border-radius:8px;margin:6px 4px 0 0;font-weight:bold;cursor:pointer}.blue{background:#1769aa;color:#fff}.green{background:#198754;color:#fff}.gray{background:#e8edf3}.red{background:#c0392b;color:#fff}#map{height:530px;border-radius:10px}.hospital{border:1px solid #d8e0ea;padding:9px;border-radius:8px;margin:6px 0;font-size:13px}.badge{background:#eaf2ff;padding:3px 6px;border-radius:12px;font-size:11px;margin-right:4px}.warn{background:#fff3cd;padding:10px;border-radius:8px;font-size:12px}.small{font-size:12px;color:#5d6878}@media(max-width:850px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><h1>🚑 Stellar Minds — Tamil Nadu Lifeline Router</h1><div>Manual patient intake • manual ambulance start • hospital routing</div></header>
+<main>
+<div class="warn">HACKATHON PROTOTYPE — not clinical advice. Hospital resource values shown here are editable prototype values, not live capacity feeds.</div>
+<div class="grid">
+<section>
+<div class="card"><h2>1. Ambulance Start — any location in Tamil Nadu</h2>
+<label>Ambulance ID</label><input id="amb" placeholder="AMB-001">
+<label>Start location / landmark *</label><input id="start" placeholder="Any village / town / landmark in Tamil Nadu">
+<button class="blue" onclick="setStart()">📍 Set Ambulance Start</button></div>
+<div class="card"><h2>2. Patient Details</h2>
+<div class="row"><div><label>Patient ID *</label><input id="pid"></div><div><label>Age</label><input id="age" type="number"></div><div><label>Heart Rate</label><input id="hr" type="number"></div><div><label>SpO₂ %</label><input id="spo2" type="number"></div><div><label>Systolic BP</label><input id="bp" type="number"></div><div><label>Respiratory Rate</label><input id="rr" type="number"></div><div><label>GCS</label><input id="gcs" type="number"></div><div><label>Temperature °C</label><input id="temp" type="number" step=".1"></div></div>
+<label>Chief complaint *</label><input id="complaint" placeholder="Chest pain / trauma / stroke symptoms">
+<label>Notes</label><textarea id="notes"></textarea>
+<label><input id="chest" type="checkbox"> Chest pain</label><label><input id="ecg" type="checkbox"> Abnormal ECG</label><label><input id="stroke" type="checkbox"> Stroke signs</label><label><input id="trauma" type="checkbox"> Major trauma</label><label><input id="vent" type="checkbox"> Ventilator / advanced airway</label><label><input id="oxygen" type="checkbox"> Oxygen required</label>
+<button class="green" onclick="recommend()">🧠 Recommend Hospital</button><button class="gray" onclick="resetApp()">↻ New Emergency</button>
+</div>
+<div class="card"><h2>Recommendation</h2><div id="rec" class="small">Enter ambulance and patient data.</div></div>
+</section>
+<section>
+<div class="card"><div id="map"></div></div>
+<div class="card"><h2>🚑 Ambulance Journey</h2><div id="status" class="small">No journey started.</div><button id="go" class="green" onclick="journey()" disabled>🚑 Travel to Recommended Hospital</button><button class="red" onclick="stop()">■ Stop</button></div>
+<div class="card"><h2>TN Hospital Network</h2><div id="list"></div></div>
+</section>
+</div></main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const H=[
+['Rajiv Gandhi Government General Hospital','Chennai',13.0787,80.2737,22,10,6,['cardio','neuro','trauma','stroke','pedia']],
+['Stanley Medical College Hospital','Chennai',13.1103,80.2870,20,9,5,['cardio','neuro','trauma','stroke','pedia']],
+['Government Kilpauk Medical College Hospital','Chennai',13.0784,80.2417,18,7,4,['cardio','neuro','trauma','pedia']],
+['Government Multi Super Speciality Hospital, Omandurar','Chennai',13.0694,80.2750,18,10,6,['cardio','neuro','trauma','stroke','pedia']],
+['Government Royapettah Hospital','Chennai',13.0524,80.2637,15,5,2,['cardio','trauma','pedia']],
+['Coimbatore Medical College Hospital','Coimbatore',11.0183,76.9670,20,9,5,['cardio','neuro','trauma','stroke','pedia']],
+['Government Rajaji Hospital / Madurai Medical College','Madurai',9.9195,78.1193,22,10,6,['cardio','neuro','trauma','stroke','pedia']],
+['Tirunelveli Medical College Hospital','Tirunelveli',8.7156,77.7567,18,7,4,['cardio','neuro','trauma','stroke','pedia']],
+['Government Medical College Hospital','Chengalpattu',12.6819,79.9740,16,6,3,['cardio','neuro','trauma','pedia']],
+['Govt. Mohan Kumaramangalam Medical College Hospital','Salem',11.6643,78.1460,18,8,4,['cardio','neuro','trauma','stroke','pedia']],
+['Government Medical College Hospital','Tiruppur',11.1085,77.3411,14,5,3,['cardio','trauma','pedia']]
+];
+let map=L.map('map').setView([10.9,78.5],7);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors'}).addTo(map);
+let am=null,hm=null,line=null,timer=null,start=null,chosen=null,last=localStorage.getItem('lastTNHospital')||'';
+H.forEach(h=>L.marker([h[2],h[3]]).addTo(map).bindPopup('<b>'+h[0]+'</b><br>'+h[1]));
+list.innerHTML=H.map(h=>'<div class="hospital"><b>'+h[0]+'</b> — '+h[1]+'<br><span class="badge">ER '+h[4]+'</span><span class="badge">ICU '+h[5]+'</span><span class="badge">Vent '+h[6]+'</span></div>').join('');
+function dist(a,b){let p=Math.PI/180,x=(b[0]-a[0])*p,y=(b[1]-a[1])*p,q=Math.sin(x/2)**2+Math.cos(a[0]*p)*Math.cos(b[0]*p)*Math.sin(y/2)**2;return 6371*2*Math.asin(Math.sqrt(q))}
+function useStart(a,b,label){
+  if(!Number.isFinite(a)||!Number.isFinite(b)){alert('Could not determine this location.');return}
+  start=[a,b,label];
+  if(am)map.removeLayer(am);
+  am=L.marker([a,b]).addTo(map).bindPopup('🚑 Ambulance start<br>'+label).openPopup();
+  map.setView([a,b],12);
+  status.innerHTML='<b>Start set:</b> '+label+' ('+a.toFixed(5)+', '+b.toFixed(5)+')';
+}
+
+const TN_FALLBACK={
+  'chennai':[13.0827,80.2707],'coimbatore':[11.0168,76.9558],'madurai':[9.9252,78.1198],
+  'tiruchirappalli':[10.7905,78.7047],'trichy':[10.7905,78.7047],'salem':[11.6643,78.1460],
+  'tirunelveli':[8.7139,77.7567],'tiruppur':[11.1085,77.3411],'erode':[11.3410,77.7172],
+  'vellore':[12.9165,79.1325],'thoothukudi':[8.7642,78.1348],'tuticorin':[8.7642,78.1348],
+  'dindigul':[10.3673,77.9803],'thanjavur':[10.7870,79.1378],'karur':[10.9601,78.0766],
+  'namakkal':[11.2194,78.1677],'cuddalore':[11.7480,79.7714],'villupuram':[11.9401,79.4861],
+  'kallakurichi':[11.7400,78.9598],'chengalpattu':[12.6819,79.9740],'kanchipuram':[12.8342,79.7036],
+  'tiruvallur':[13.1437,79.9080],'ranipet':[12.9249,79.3333],'tirupathur':[12.4967,78.5730],
+  'krishnagiri':[12.5186,78.2137],'dharmapuri':[12.1211,78.1582],'nilgiris':[11.4102,76.6950],
+  'ooty':[11.4102,76.6950],'udhagamandalam':[11.4102,76.6950],'pudukkottai':[10.3797,78.8208],
+  'sivaganga':[9.8433,78.4809],'ramanathapuram':[9.3639,78.8395],'virudhunagar':[9.5851,77.9579],
+  'tenkasi':[8.9590,77.3152],'sivakasi':[9.4533,77.8024],'paramakudi':[9.5460,78.5925],
+  'nagapattinam':[10.7672,79.8449],'mayiladuthurai':[11.1035,79.6550],'perambalur':[11.2320,78.8801],
+  'ariyalur':[11.1401,79.0780],'thiruvarur':[10.7727,79.6360],'tiruvarur':[10.7727,79.6360],
+  'kancheepuram':[12.8342,79.7036]
+};
+
+function findFallbackPlace(s){
+  const q=s.toLowerCase().replace(/[,\-]/g,' ').replace(/\s+/g,' ').trim();
+  for(const key of Object.keys(TN_FALLBACK)){
+    if(q===key || q.startsWith(key+' ') || q.includes(' '+key+' ') || q.includes(key+' tamil nadu')) return key;
+  }
+  return null;
+}
+
+function setStart(){
+  const s=startInput().trim();
+  if(!s){alert('Enter the ambulance start location.');return}
+  status.textContent='Finding '+s+' in Tamil Nadu…';
+
+  const queries=[s+', Tamil Nadu, India',s+', Tamil Nadu',s+', India'];
+  const isTN=item=>{
+    const a=item.address||{};
+    const all=((item.display_name||'')+' '+Object.values(a).join(' ')).toLowerCase();
+    return all.includes('tamil nadu');
+  };
+
+  const searchNext=idx=>{
+    if(idx>=queries.length){
+      const key=findFallbackPlace(s);
+      if(key){
+        const p=TN_FALLBACK[key];
+        useStart(p[0],p[1],s+' (Tamil Nadu)');
+      }else{
+        status.textContent='Location not found. Try a Tamil Nadu city, town, village, area, street, or landmark name.';
+      }
+      return;
+    }
+    fetch('https://nominatim.openstreetmap.org/search?format=json&limit=10&countrycodes=in&addressdetails=1&q='+encodeURIComponent(queries[idx]))
+      .then(r=>{if(!r.ok)throw new Error('Geocoder unavailable');return r.json();})
+      .then(results=>{
+        const tn=results.find(isTN);
+        if(tn) useStart(+tn.lat,+tn.lon,s);
+        else searchNext(idx+1);
+      })
+      .catch(()=>searchNext(idx+1));
+  };
+  searchNext(0);
+}
+
+function startInput(){return document.getElementById('start').value}
+function acuity(){let s=0,sp=+spo2.value||100,h=+hr.value||0,b=+bp.value||120,r=+rr.value||18,g=+gcs.value||15;if(sp<90)s+=5;else if(sp<94)s+=3;if(h>130||h<45)s+=3;else if(h>110||h<55)s+=2;if(b<90||b>200)s+=3;else if(b<100||b>180)s+=2;if(r>30||r<8)s+=3;else if(r>24||r<10)s+=2;if(g<9)s+=5;else if(g<13)s+=3;if(chest.checked||ecg.checked||stroke.checked||trauma.checked)s+=2;return Math.min(20,s)}
+function recommend(){if(!start){alert('Set the ambulance start location first.');return}if(!pid.value.trim()||!complaint.value.trim()){alert('Enter Patient ID and chief complaint.');return}let ac=acuity(),need=[];if(vent.checked||(+spo2.value||100)<90)need.push('vent');if(chest.checked||ecg.checked)need.push('cardio');if(stroke.checked)need.push('stroke');if(trauma.checked)need.push('trauma');if((+age.value||0)<15)need.push('pedia');let r=H.map(h=>{let m=need.filter(n=>h[7].includes(n)).length,di=dist(start,h.slice(2,4)),fit=need.length?m/need.length:1,score=fit*60+h[4]+h[5]*(ac>=10?2:.7)+h[6]*(need.includes('vent')?5:.5)-di*(ac>=10?.7:.45)-(h[0]===last?18:0);return{h,m,di,fit,score}}).sort((a,b)=>b.score-a.score);let z=r[0];chosen=z.h;last=chosen[0];localStorage.setItem('lastTNHospital',last);if(hm)map.removeLayer(hm);hm=L.marker([chosen[2],chosen[3]]).addTo(map).bindPopup('🏥 '+chosen[0]).openPopup();map.fitBounds([[start[0],start[1]],[chosen[2],chosen[3]]],{padding:[30,30]});rec.innerHTML='<div class="hospital"><b>🏥 '+chosen[0]+'</b><br>'+chosen[1]+'<br><span class="badge">Acuity '+ac+'/20</span><span class="badge">'+z.di.toFixed(1)+' km straight-line</span><span class="badge">Capability match '+z.m+'/'+need.length+'</span><br><br>Prototype resources: ER '+chosen[4]+' • ICU '+chosen[5]+' • Ventilators '+chosen[6]+'</div><b>Alternatives</b>'+r.slice(1,4).map(x=>'<div class="hospital">'+x.h[0]+' — '+x.di.toFixed(1)+' km</div>').join('');go.disabled=false}
+async function journey(){if(!start||!chosen)return;stop();let u='https://router.project-osrm.org/route/v1/driving/'+start[1]+','+start[0]+';'+chosen[3]+','+chosen[2]+'?overview=full&geometries=geojson';try{let j=await(await fetch(u)).json();if(!j.routes?.length)throw 0;let c=j.routes[0].geometry.coordinates.map(x=>[x[1],x[0]]),i=0;if(line)map.removeLayer(line);line=L.polyline(c,{weight:5}).addTo(map);go.disabled=true;timer=setInterval(()=>{if(i>=c.length){stop();if(am)am.setLatLng([chosen[2],chosen[3]]);status.innerHTML='<b>✅ ARRIVED</b> at '+chosen[0];return}let p=c[i++];if(am)am.setLatLng(p);status.innerHTML='<b>🚑 EN ROUTE</b> to '+chosen[0]+'<br>Progress: '+Math.round(i/c.length*100)+'%<br>Position: '+p[0].toFixed(5)+', '+p[1].toFixed(5)},180)}catch(e){window.open('https://www.google.com/maps/dir/?api=1&origin='+start[0]+','+start[1]+'&destination='+chosen[2]+','+chosen[3]+'&travelmode=driving','_blank');status.textContent='Road routing unavailable; Google Maps opened.'}}
+function stop(){if(timer){clearInterval(timer);timer=null}if(chosen)go.disabled=false}
+function resetApp(){stop();start=null;chosen=null;['amb','start','pid','age','hr','spo2','bp','rr','gcs','temp','complaint','notes'].forEach(id=>document.getElementById(id).value='');['chest','ecg','stroke','trauma','vent','oxygen'].forEach(id=>document.getElementById(id).checked=false);rec.textContent='Enter ambulance and patient data.';status.textContent='New emergency ready. Enter any ambulance start location in Tamil Nadu.';go.disabled=true;if(line){map.removeLayer(line);line=null}if(am){map.removeLayer(am);am=null}if(hm){map.removeLayer(hm);hm=null}map.setView([10.9,78.5],7)}
+</script></body></html>
